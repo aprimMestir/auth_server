@@ -41,6 +41,87 @@ class Database:
         except mysql.connector.Error as err:
             logging.error(f"Ошибка подключения к базе данных: {err}")
             raise
+    def equip_item(self, character_id, item_id, slot):
+        """
+        Экипирует предмет на персонажа.
+        :param character_id: ID персонажа.
+        :param item_id: ID предмета.
+        :param slot: Слот для экипировки (например, "weapon", "armor").
+        :return: True, если успешно, иначе False.
+        """
+        try:
+            # Проверяем, есть ли предмет в инвентаре
+            self.cursor.execute(
+                "SELECT quantity FROM inventory WHERE character_id = %s AND item_id = %s",
+                (character_id, item_id)
+            )
+            result = self.cursor.fetchone()
+            if not result or result[0] < 1:
+                logging.warning(f"Предмет {item_id} отсутствует в инвентаре персонажа {character_id}")
+                return False
+
+            # Экипируем предмет
+            self.cursor.execute(
+                "INSERT INTO equipment (character_id, item_id, slot) VALUES (%s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE item_id = %s",
+                (character_id, item_id, slot, item_id)
+            )
+            self.connection.commit()
+            logging.info(f"Предмет {item_id} экипирован в слот {slot} для персонажа {character_id}")
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при экипировке предмета {item_id} для персонажа {character_id}: {err}")
+            return False
+
+    def unequip_item(self, character_id, slot):
+        """
+        Снимает предмет с персонажа.
+        :param character_id: ID персонажа.
+        :param slot: Слот для снятия (например, "weapon", "armor").
+        :return: True, если успешно, иначе False.
+        """
+        try:
+            self.cursor.execute(
+                "DELETE FROM equipment WHERE character_id = %s AND slot = %s",
+                (character_id, slot)
+            )
+            self.connection.commit()
+            logging.info(f"Предмет снят со слота {slot} для персонажа {character_id}")
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при снятии предмета со слота {slot} для персонажа {character_id}: {err}")
+            return False
+
+    def get_equipment(self, character_id):
+        """
+        Возвращает экипировку персонажа.
+        :param character_id: ID персонажа.
+        :return: Список экипированных предметов.
+        """
+        try:
+            self.cursor.execute(
+                "SELECT items.id, items.name, items.description, items.type, items.weight, items.value, equipment.slot "
+                "FROM equipment "
+                "JOIN items ON equipment.item_id = items.id "
+                "WHERE equipment.character_id = %s",
+                (character_id,)
+            )
+            result = self.cursor.fetchall()
+            equipment = []
+            for row in result:
+                equipment.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2],
+                    "type": row[3],
+                    "weight": row[4],
+                    "value": row[5],
+                    "slot": row[6]
+                })
+            return equipment
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при получении экипировки персонажа {character_id}: {err}")
+            return None
 
     def add_user(self, username, password, ip_address=None):
         password_hash = generate_password_hash(password)
@@ -79,7 +160,7 @@ class Database:
         result = self.cursor.fetchone()
         return result is None
 
-    def create_character(self, user_id, name, class_name, race, level=1, health=100, mana=50, strength=10, agility=10, intelligence=10, xp=0, gold=0, inventory=""):
+    def create_character(self, user_id, name, class_name, race, level=1, health=100, mana=50, strength=10, agility=10, intelligence=10, xp=0, gold=0):
         if not validate_character_name(name):
             logging.warning(f"Невалидное имя персонажа: {name}")
             return False  # Имя не прошло валидацию
@@ -90,9 +171,9 @@ class Database:
 
         try:
             self.cursor.execute(
-                "INSERT INTO characters (user_id, name, class, race, level, health, mana, strength, agility, intelligence, xp, gold, inventory) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (user_id, name, class_name, race, level, health, mana, strength, agility, intelligence, xp, gold, inventory)
+                "INSERT INTO characters (user_id, name, class, race, level, health, mana, strength, agility, intelligence, xp, gold) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (user_id, name, class_name, race, level, health, mana, strength, agility, intelligence, xp, gold)
             )
             self.connection.commit()
             return True
@@ -117,12 +198,11 @@ class Database:
                 "agility": result[9],
                 "intelligence": result[10],
                 "xp": result[11],
-                "gold": result[12],
-                "inventory": result[13]
+                "gold": result[12]
             }
         return None
 
-    def update_character(self, character_id, name=None, class_name=None, race=None, level=None, health=None, mana=None, strength=None, agility=None, intelligence=None, xp=None, gold=None, inventory=None):
+    def update_character(self, character_id, name=None, class_name=None, race=None, level=None, health=None, mana=None, strength=None, agility=None, intelligence=None, xp=None, gold=None):
         try:
             updates = []
             params = []
@@ -165,9 +245,6 @@ class Database:
             if gold is not None:
                 updates.append("gold = %s")
                 params.append(gold)
-            if inventory is not None:
-                updates.append("inventory = %s")
-                params.append(inventory)
 
             if updates:
                 query = f"UPDATE characters SET {', '.join(updates)} WHERE id = %s"
@@ -179,6 +256,88 @@ class Database:
         except mysql.connector.Error as err:
             logging.error(f"Ошибка при обновлении персонажа {character_id}: {err}")
             return False
+
+    # Методы для работы с предметами и инвентарём
+    def add_item(self, name, description, item_type, weight=0, value=0):
+        try:
+            self.cursor.execute(
+                "INSERT INTO items (name, description, type, weight, value) VALUES (%s, %s, %s, %s, %s)",
+                (name, description, item_type, weight, value)
+            )
+            self.connection.commit()
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при добавлении предмета {name}: {err}")
+            return False
+
+    def get_item(self, item_id):
+        self.cursor.execute("SELECT * FROM items WHERE id = %s", (item_id,))
+        result = self.cursor.fetchone()
+        if result:
+            return {
+                "id": result[0],
+                "name": result[1],
+                "description": result[2],
+                "type": result[3],
+                "weight": result[4],
+                "value": result[5]
+            }
+        return None
+
+    def add_item_to_inventory(self, character_id, item_id, quantity=1):
+        try:
+            self.cursor.execute(
+                "INSERT INTO inventory (character_id, item_id, quantity) VALUES (%s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE quantity = quantity + %s",
+                (character_id, item_id, quantity, quantity)
+            )
+            self.connection.commit()
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при добавлении предмета {item_id} в инвентарь персонажа {character_id}: {err}")
+            return False
+
+    def remove_item_from_inventory(self, character_id, item_id, quantity=1):
+        try:
+            self.cursor.execute(
+                "UPDATE inventory SET quantity = quantity - %s WHERE character_id = %s AND item_id = %s",
+                (quantity, character_id, item_id)
+            )
+            self.cursor.execute(
+                "DELETE FROM inventory WHERE character_id = %s AND item_id = %s AND quantity <= 0",
+                (character_id, item_id)
+            )
+            self.connection.commit()
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при удалении предмета {item_id} из инвентаря персонажа {character_id}: {err}")
+            return False
+
+    def get_inventory(self, character_id):
+        try:
+            self.cursor.execute(
+                "SELECT items.id, items.name, items.description, items.type, items.weight, items.value, inventory.quantity "
+                "FROM inventory "
+                "JOIN items ON inventory.item_id = items.id "
+                "WHERE inventory.character_id = %s",
+                (character_id,)
+            )
+            result = self.cursor.fetchall()
+            inventory = []
+            for row in result:
+                inventory.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2],
+                    "type": row[3],
+                    "weight": row[4],
+                    "value": row[5],
+                    "quantity": row[6]
+                })
+            return inventory
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при получении инвентаря персонажа {character_id}: {err}")
+            return None
 
     def close(self):
         if self.connection.is_connected():

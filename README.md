@@ -72,3 +72,48 @@
     {
       "message": "Character created successfully"
     }
+
+Получение инвентаря:
+    
+    curl -X GET http://127.0.0.1:5000/get_inventory?character_id=1
+
+Добавление предмета в инвентарь:
+
+    curl -X POST http://127.0.0.1:5000/add_item_to_inventory \
+    -H "Content-Type: application/json" \
+    -d '{
+      "character_id": 1,
+      "item_id": 1,
+      "quantity": 2
+    }'
+
+Удаление предмета из инвентаря:
+
+    curl -X POST http://127.0.0.1:5000/remove_item_from_inventory \
+    -H "Content-Type: application/json" \
+    -d '{
+      "character_id": 1,
+      "item_id": 1,
+      "quantity": 1
+    }'
+
+Получение экипировки:
+
+    curl -X GET http://127.0.0.1:5000/get_equipment?character_id=1
+Экипировка предмета:
+
+    curl -X POST http://127.0.0.1:5000/equip_item \
+    -H "Content-Type: application/json" \
+    -d '{
+      "character_id": 1,
+      "item_id": 1,
+      "slot": "weapon"
+    }'
+Снятие предмета:
+
+    curl -X POST http://127.0.0.1:5000/unequip_item \
+    -H "Content-Type: application/json" \
+    -d '{
+      "character_id": 1,
+      "slot": "weapon"
+    }'
