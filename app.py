@@ -7,7 +7,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here'
 db = Database()
 
-# Маршрут для регистрации
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
@@ -22,7 +21,6 @@ def register():
     else:
         return jsonify({'error': 'Username already exists'}), 400
 
-# Маршрут для входа
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
@@ -40,6 +38,30 @@ def login():
             return jsonify({'message': 'Login successful', 'token': token}), 200
 
     return jsonify({'error': 'Invalid username or password'}), 401
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'error': 'Token is required'}), 400
+
+    username = User.verify_token(token, app.config['SECRET_KEY'])
+    if not username:
+        return jsonify({'error': 'Invalid or expired token'}), 401
+
+    return jsonify({'message': 'Logout successful'}), 200
+
+@app.route('/check_auth', methods=['GET'])
+def check_auth():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'error': 'Token is required'}), 400
+
+    username = User.verify_token(token, app.config['SECRET_KEY'])
+    if username:
+        return jsonify({'message': f'User {username} is authenticated'}), 200
+    else:
+        return jsonify({'error': 'Invalid or expired token'}), 401
 
 # Маршрут для создания персонажа
 @app.route('/create_character', methods=['POST'])
@@ -83,6 +105,5 @@ def update_character():
         return jsonify({'message': 'Character updated successfully'}), 200
     else:
         return jsonify({'error': 'Failed to update character'}), 500
-
 if __name__ == '__main__':
     app.run(debug=True)
