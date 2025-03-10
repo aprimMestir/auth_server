@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 
+
 class Database:
     def __init__(self):
         self.connection = mysql.connector.connect(user='app_user', password='P@$$w0rd',
