@@ -11,3 +11,7 @@
 Проверка авторизации:
 
     curl -X GET http://127.0.0.1:5000/check_auth?username=testuser
+Логаут:
+    
+    curl -X POST http://127.0.0.1:5000/logout \
+    -H "Authorization: your_jwt_token_here"

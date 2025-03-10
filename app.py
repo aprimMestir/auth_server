@@ -1,15 +1,12 @@
 from flask import Flask, request, jsonify
-from models import Database
+from models import Database, User
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your_secret_key_here'
 db = Database()
 
-# Секретный ключ для подписи JWT-токенов
-app.config['SECRET_KEY'] = 'your_secret_key_here'
-
-# Маршрут для регистрации
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
@@ -24,7 +21,6 @@ def register():
     else:
         return jsonify({'error': 'Username already exists'}), 400
 
-# Маршрут для входа
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
@@ -34,30 +30,27 @@ def login():
     if not username or not password:
         return jsonify({'error': 'Username and password are required'}), 400
 
-    user = db.get_user(username)
-    if user and user.check_password(password):
-        # Генерация токена
-        token = user.generate_token(app.config['SECRET_KEY'])
-        return jsonify({'message': 'Login successful', 'token': token}), 200
-    else:
-        return jsonify({'error': 'Invalid username or password'}), 401
+    user_data = db.get_user(username)
+    if user_data:
+        user = User(user_data['username'], user_data['password_hash'])
+        if user.check_password(password):
+            token = user.generate_token(app.config['SECRET_KEY'])
+            return jsonify({'message': 'Login successful', 'token': token}), 200
 
-# Маршрут для логаута
+    return jsonify({'error': 'Invalid username or password'}), 401
+
 @app.route('/logout', methods=['POST'])
 def logout():
     token = request.headers.get('Authorization')
     if not token:
         return jsonify({'error': 'Token is required'}), 400
 
-    # Проверка токена
     username = User.verify_token(token, app.config['SECRET_KEY'])
     if not username:
         return jsonify({'error': 'Invalid or expired token'}), 401
 
-    # В реальном приложении можно добавить токен в черный список
     return jsonify({'message': 'Logout successful'}), 200
 
-# Маршрут для проверки авторизации
 @app.route('/check_auth', methods=['GET'])
 def check_auth():
     token = request.headers.get('Authorization')
