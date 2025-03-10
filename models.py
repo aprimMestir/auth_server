@@ -42,7 +42,7 @@ class Database:
             logging.error(f"Ошибка подключения к базе данных: {err}")
             raise
 
-    def add_user(self, username, password):
+    def add_user(self, username, password, ip_address=None):
         password_hash = generate_password_hash(password)
         try:
             self.cursor.execute(
@@ -50,9 +50,16 @@ class Database:
                 (username, password_hash)
             )
             self.connection.commit()
+            if ip_address:
+                logging.info(f"Пользователь {username} успешно зарегистрирован [IP: {ip_address}]")
+            else:
+                logging.info(f"Пользователь {username} успешно зарегистрирован")
             return True
         except mysql.connector.Error as err:
-            logging.error(f"Ошибка при добавлении пользователя {username}: {err}")
+            if ip_address:
+                logging.error(f"Ошибка при регистрации пользователя {username} [IP: {ip_address}]: {err}")
+            else:
+                logging.error(f"Ошибка при регистрации пользователя {username}: {err}")
             return False
 
     def get_user(self, username):
@@ -72,7 +79,7 @@ class Database:
         result = self.cursor.fetchone()
         return result is None
 
-    def create_character(self, user_id, name, level=1, health=100, mana=50, strength=10, agility=10, intelligence=10):
+    def create_character(self, user_id, name, class_name, race, level=1, health=100, mana=50, strength=10, agility=10, intelligence=10, xp=0, gold=0, inventory=""):
         if not validate_character_name(name):
             logging.warning(f"Невалидное имя персонажа: {name}")
             return False  # Имя не прошло валидацию
@@ -83,9 +90,9 @@ class Database:
 
         try:
             self.cursor.execute(
-                "INSERT INTO characters (user_id, name, level, health, mana, strength, agility, intelligence) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (user_id, name, level, health, mana, strength, agility, intelligence)
+                "INSERT INTO characters (user_id, name, class, race, level, health, mana, strength, agility, intelligence, xp, gold, inventory) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (user_id, name, class_name, race, level, health, mana, strength, agility, intelligence, xp, gold, inventory)
             )
             self.connection.commit()
             return True
@@ -101,16 +108,21 @@ class Database:
                 "id": result[0],
                 "user_id": result[1],
                 "name": result[2],
-                "level": result[3],
-                "health": result[4],
-                "mana": result[5],
-                "strength": result[6],
-                "agility": result[7],
-                "intelligence": result[8]
+                "class": result[3],
+                "race": result[4],
+                "level": result[5],
+                "health": result[6],
+                "mana": result[7],
+                "strength": result[8],
+                "agility": result[9],
+                "intelligence": result[10],
+                "xp": result[11],
+                "gold": result[12],
+                "inventory": result[13]
             }
         return None
 
-    def update_character(self, character_id, name=None, level=None, health=None, mana=None, strength=None, agility=None, intelligence=None):
+    def update_character(self, character_id, name=None, class_name=None, race=None, level=None, health=None, mana=None, strength=None, agility=None, intelligence=None, xp=None, gold=None, inventory=None):
         try:
             updates = []
             params = []
@@ -123,6 +135,12 @@ class Database:
                     return False  # Имя уже занято
                 updates.append("name = %s")
                 params.append(name)
+            if class_name is not None:
+                updates.append("class = %s")
+                params.append(class_name)
+            if race is not None:
+                updates.append("race = %s")
+                params.append(race)
             if level is not None:
                 updates.append("level = %s")
                 params.append(level)
@@ -141,6 +159,15 @@ class Database:
             if intelligence is not None:
                 updates.append("intelligence = %s")
                 params.append(intelligence)
+            if xp is not None:
+                updates.append("xp = %s")
+                params.append(xp)
+            if gold is not None:
+                updates.append("gold = %s")
+                params.append(gold)
+            if inventory is not None:
+                updates.append("inventory = %s")
+                params.append(inventory)
 
             if updates:
                 query = f"UPDATE characters SET {', '.join(updates)} WHERE id = %s"
