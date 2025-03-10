@@ -29,3 +29,26 @@
     curl -X POST http://127.0.0.1:5000/update_character \
     -H "Content-Type: application/json" \
     -d '{"character_id": 1, "updates": {"level": 2, "health": 120}}'
+
+Создание персонажа с невалидным именем:
+
+    curl -X POST http://127.0.0.1:5000/create_character \
+    -H "Content-Type: application/json" \
+    -d '{"user_id": 1, "name": "W@rrior"}'
+    
+    Ответ:
+
+    {
+      "error": "Failed to create character. Invalid name or database error."
+    }
+Создание персонажа с валидным именем:
+
+    curl -X POST http://127.0.0.1:5000/create_character \
+    -H "Content-Type: application/json" \
+    -d '{"user_id": 1, "name": "Warrior"}'
+
+    Ответ:
+
+    {
+      "message": "Character created successfully"
+    }
