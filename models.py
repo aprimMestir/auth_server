@@ -2,6 +2,8 @@ import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
 import re
 import logging
+import jwt
+from datetime import datetime, timedelta, timezone
 
 # Настройка логирования
 logging.basicConfig(
@@ -27,6 +29,35 @@ def validate_character_name(name):
         return False  # Имя может содержать только буквы, цифры и пробелы
     return True
 
+class User:
+    """
+    Класс для работы с пользователями.
+    """
+    def __init__(self, username, password_hash):
+        self.username = username
+        self.password_hash = password_hash
+
+    def check_password(self, password):
+        """
+        Проверяет, совпадает ли пароль с хэшем.
+        :param password: Пароль для проверки.
+        :return: True, если пароль верный, иначе False.
+        """
+        return check_password_hash(self.password_hash, password)
+
+    def generate_token(self, secret_key, expires_in=3600):
+        """
+        Генерирует JWT-токен для пользователя.
+        :param secret_key: Секретный ключ для подписи токена.
+        :param expires_in: Время жизни токена в секундах.
+        :return: JWT-токен.
+        """
+        payload = {
+            'username': self.username,
+            'exp': datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        }
+        return jwt.encode(payload, secret_key, algorithm='HS256')
+
 class Database:
     def __init__(self):
         try:
@@ -41,87 +72,6 @@ class Database:
         except mysql.connector.Error as err:
             logging.error(f"Ошибка подключения к базе данных: {err}")
             raise
-    def equip_item(self, character_id, item_id, slot):
-        """
-        Экипирует предмет на персонажа.
-        :param character_id: ID персонажа.
-        :param item_id: ID предмета.
-        :param slot: Слот для экипировки (например, "weapon", "armor").
-        :return: True, если успешно, иначе False.
-        """
-        try:
-            # Проверяем, есть ли предмет в инвентаре
-            self.cursor.execute(
-                "SELECT quantity FROM inventory WHERE character_id = %s AND item_id = %s",
-                (character_id, item_id)
-            )
-            result = self.cursor.fetchone()
-            if not result or result[0] < 1:
-                logging.warning(f"Предмет {item_id} отсутствует в инвентаре персонажа {character_id}")
-                return False
-
-            # Экипируем предмет
-            self.cursor.execute(
-                "INSERT INTO equipment (character_id, item_id, slot) VALUES (%s, %s, %s) "
-                "ON DUPLICATE KEY UPDATE item_id = %s",
-                (character_id, item_id, slot, item_id)
-            )
-            self.connection.commit()
-            logging.info(f"Предмет {item_id} экипирован в слот {slot} для персонажа {character_id}")
-            return True
-        except mysql.connector.Error as err:
-            logging.error(f"Ошибка при экипировке предмета {item_id} для персонажа {character_id}: {err}")
-            return False
-
-    def unequip_item(self, character_id, slot):
-        """
-        Снимает предмет с персонажа.
-        :param character_id: ID персонажа.
-        :param slot: Слот для снятия (например, "weapon", "armor").
-        :return: True, если успешно, иначе False.
-        """
-        try:
-            self.cursor.execute(
-                "DELETE FROM equipment WHERE character_id = %s AND slot = %s",
-                (character_id, slot)
-            )
-            self.connection.commit()
-            logging.info(f"Предмет снят со слота {slot} для персонажа {character_id}")
-            return True
-        except mysql.connector.Error as err:
-            logging.error(f"Ошибка при снятии предмета со слота {slot} для персонажа {character_id}: {err}")
-            return False
-
-    def get_equipment(self, character_id):
-        """
-        Возвращает экипировку персонажа.
-        :param character_id: ID персонажа.
-        :return: Список экипированных предметов.
-        """
-        try:
-            self.cursor.execute(
-                "SELECT items.id, items.name, items.description, items.type, items.weight, items.value, equipment.slot "
-                "FROM equipment "
-                "JOIN items ON equipment.item_id = items.id "
-                "WHERE equipment.character_id = %s",
-                (character_id,)
-            )
-            result = self.cursor.fetchall()
-            equipment = []
-            for row in result:
-                equipment.append({
-                    "id": row[0],
-                    "name": row[1],
-                    "description": row[2],
-                    "type": row[3],
-                    "weight": row[4],
-                    "value": row[5],
-                    "slot": row[6]
-                })
-            return equipment
-        except mysql.connector.Error as err:
-            logging.error(f"Ошибка при получении экипировки персонажа {character_id}: {err}")
-            return None
 
     def add_user(self, username, password, ip_address=None):
         password_hash = generate_password_hash(password)
@@ -257,7 +207,6 @@ class Database:
             logging.error(f"Ошибка при обновлении персонажа {character_id}: {err}")
             return False
 
-    # Методы для работы с предметами и инвентарём
     def add_item(self, name, description, item_type, weight=0, value=0):
         try:
             self.cursor.execute(
@@ -339,8 +288,176 @@ class Database:
             logging.error(f"Ошибка при получении инвентаря персонажа {character_id}: {err}")
             return None
 
+    def get_equipment(self, character_id):
+        """
+        Возвращает экипировку персонажа.
+        :param character_id: ID персонажа.
+        :return: Список экипированных предметов.
+        """
+        try:
+            self.cursor.execute(
+                "SELECT items.id, items.name, items.description, items.type, items.weight, items.value, equipment.slot "
+                "FROM equipment "
+                "JOIN items ON equipment.item_id = items.id "
+                "WHERE equipment.character_id = %s",
+                (character_id,)
+            )
+            result = self.cursor.fetchall()
+            equipment = []
+            for row in result:
+                equipment.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2],
+                    "type": row[3],
+                    "weight": row[4],
+                    "value": row[5],
+                    "slot": row[6]
+                })
+            return equipment
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при получении экипировки персонажа {character_id}: {err}")
+            return None
+
     def close(self):
         if self.connection.is_connected():
             self.cursor.close()
             self.connection.close()
             logging.info("Подключение к базе данных закрыто.")
+
+    def get_item_stats(self, item_id):
+        """
+        Возвращает характеристики предмета.
+        :param item_id: ID предмета.
+        :return: Словарь с характеристиками или None, если предмет не найден.
+        """
+        self.cursor.execute("SELECT * FROM item_stats WHERE item_id = %s", (item_id,))
+        result = self.cursor.fetchone()
+        if result:
+            return {
+                "item_id": result[0],
+                "strength": result[1],
+                "agility": result[2],
+                "intelligence": result[3],
+                "health": result[4],
+                "mana": result[5]
+            }
+        return None
+
+    def apply_item_stats(self, character_id, item_id, operation="add"):
+        """
+        Применяет или снимает характеристики предмета.
+        :param character_id: ID персонажа.
+        :param item_id: ID предмета.
+        :param operation: "add" для добавления, "subtract" для снятия.
+        """
+        stats = self.get_item_stats(item_id)
+        if not stats:
+            return False
+
+        updates = []
+        params = []
+        for stat, value in stats.items():
+            if stat == "item_id":
+                continue
+            if value != 0:
+                if operation == "add":
+                    updates.append(f"{stat} = {stat} + %s")
+                else:
+                    updates.append(f"{stat} = {stat} - %s")
+                params.append(value)
+
+        if updates:
+            query = f"UPDATE characters SET {', '.join(updates)} WHERE id = %s"
+            params.append(character_id)
+            self.cursor.execute(query, tuple(params))
+            self.connection.commit()
+        return True
+
+    def equip_item(self, character_id, item_id, slot):
+        """
+        Экипирует предмет на персонажа и применяет его характеристики.
+        """
+        try:
+            # Проверяем, есть ли предмет в инвентаре
+            self.cursor.execute(
+                "SELECT quantity FROM inventory WHERE character_id = %s AND item_id = %s",
+                (character_id, item_id)
+            )
+            result = self.cursor.fetchone()
+            if not result or result[0] < 1:
+                logging.warning(f"Предмет {item_id} отсутствует в инвентаре персонажа {character_id}")
+                return False
+
+            # Применяем характеристики предмета
+            if not self.apply_item_stats(character_id, item_id, operation="add"):
+                logging.warning(f"Не удалось применить характеристики предмета {item_id}")
+                return False
+
+            # Экипируем предмет
+            self.cursor.execute(
+                "INSERT INTO equipment (character_id, item_id, slot) VALUES (%s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE item_id = %s",
+                (character_id, item_id, slot, item_id)
+            )
+            self.connection.commit()
+            logging.info(f"Предмет {item_id} экипирован в слот {slot} для персонажа {character_id}")
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при экипировке предмета {item_id} для персонажа {character_id}: {err}")
+            return False
+
+    def unequip_item(self, character_id, slot):
+        """
+        Снимает предмет с персонажа и убирает его характеристики.
+        """
+        try:
+            # Получаем ID предмета, который нужно снять
+            self.cursor.execute(
+                "SELECT item_id FROM equipment WHERE character_id = %s AND slot = %s",
+                (character_id, slot)
+            )
+            result = self.cursor.fetchone()
+            if not result:
+                logging.warning(f"Слот {slot} пуст для персонажа {character_id}")
+                return False
+
+            item_id = result[0]
+
+            # Убираем характеристики предмета
+            if not self.apply_item_stats(character_id, item_id, operation="subtract"):
+                logging.warning(f"Не удалось убрать характеристики предмета {item_id}")
+                return False
+
+            # Снимаем предмет
+            self.cursor.execute(
+                "DELETE FROM equipment WHERE character_id = %s AND slot = %s",
+                (character_id, slot)
+            )
+            self.connection.commit()
+            logging.info(f"Предмет {item_id} снят со слота {slot} для персонажа {character_id}")
+            return True
+        except mysql.connector.Error as err:
+            logging.error(f"Ошибка при снятии предмета со слота {slot} для персонажа {character_id}: {err}")
+            return False
+
+    def get_character_with_equipment(self, character_id):
+        """
+        Возвращает характеристики персонажа с учётом экипированных предметов.
+        """
+        character = self.get_character(character_id)
+        if not character:
+            return None
+
+        equipment = self.get_equipment(character_id)
+        if equipment:
+            for item in equipment:
+                stats = self.get_item_stats(item["id"])
+                if stats:
+                    character["strength"] += stats.get("strength", 0)
+                    character["agility"] += stats.get("agility", 0)
+                    character["intelligence"] += stats.get("intelligence", 0)
+                    character["health"] += stats.get("health", 0)
+                    character["mana"] += stats.get("mana", 0)
+
+        return character

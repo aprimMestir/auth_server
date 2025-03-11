@@ -117,3 +117,70 @@
       "character_id": 1,
       "slot": "weapon"
     }'
+
+Экипировка меча (тип "weapon") в слот "weapon":
+
+
+    curl -X POST http://localhost:5000/equip_item \
+    -H "Content-Type: application/json" \
+    -d '{"character_id": 1, "item_id": 5, "slot": "weapon"}'
+
+Попытка экипировать броню (тип "armor") в слот "weapon":
+
+    curl -X POST http://localhost:5000/equip_item \
+    -H "Content-Type: application/json" \
+    -d '{"character_id": 1, "item_id": 8, "slot": "weapon"}'
+    
+    # Ответ: 
+    # {"error": "Invalid slot weapon for armor"}
+
+Попытка экипировать предмет в занятый слот:
+
+    curl -X POST http://localhost:5000/equip_item \
+    -H "Content-Type: application/json" \
+    -d '{"character_id": 1, "item_id": 5, "slot": "weapon"}'
+    
+    # Ответ: 
+    # {"error": "Slot already occupied"}
+
+Экипировка меча (увеличивает силу на 10):
+
+    curl -X POST http://localhost:5000/equip \
+    -H "Content-Type: application/json" \
+    -d '{"character_id": 1, "item_id": 5, "slot": "weapon"}'
+
+Получение характеристик персонажа:
+
+    curl -X GET http://localhost:5000/character/1
+    
+    # Ответ:
+    # {
+    #   "id": 1,
+    #   "name": "Warrior",
+    #   "strength": 20,  # Базовая сила 10 + 10 от меча
+    #   "agility": 10,
+    #   "intelligence": 5,
+    #   "health": 100,
+    #   "mana": 50
+    # }
+
+Снятие меча:
+
+    curl -X POST http://localhost:5000/unequip \
+    -H "Content-Type: application/json" \
+    -d '{"character_id": 1, "slot": "weapon"}'
+
+    Получение характеристик после снятия
+    
+    curl -X GET http://localhost:5000/character/1
+    
+    # Ответ:
+    # {
+    #   "id": 1,
+    #   "name": "Warrior",
+    #   "strength": 10,  # Базовая сила 10
+    #   "agility": 10,
+    #   "intelligence": 5,
+    #   "health": 100,
+    #   "mana": 50
+    # }
